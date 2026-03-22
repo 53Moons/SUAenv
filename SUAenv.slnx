@@ -1,5 +1,5 @@
 <Solution>
-  <Project Path="SUAenv/SUAenv.csproj" />
+  <Project Path="SUAenv/SUAenv.csproj" Id="230feccb-e30b-4276-80d7-1fb0d47be190" />
   <Properties Name="CRMSolutionProperties">
     <Property Name="SolutionIsBoundToCRM" Value="True" />
   </Properties>
