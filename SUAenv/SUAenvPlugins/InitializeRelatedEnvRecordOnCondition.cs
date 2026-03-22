@@ -12,8 +12,7 @@ namespace SUAenvPlugins.Action
         private const string ChildEntityEIS = "sua_eis";
         private const string ChildEntityCATEX = "sua_environmentalcatex";
 
-        // Lookup Fields
-        private const string ParentLookup = "sua_environmental";
+        // Lookup Fields       
         private const string EAChildLookup = "sua_ea";
         private const string EISChildLookup = "sua_eis";
         private const string CATEXChildLookup = "sua_catex";
@@ -90,37 +89,28 @@ namespace SUAenvPlugins.Action
                     return;
                 }
 
-                // Does a child record already exist
-                QueryExpression query = new QueryExpression(targetChildEntityName)
-                {
-                    ColumnSet = new ColumnSet(false),
-                    TopCount = 1
-                };
-
-                query.Criteria.AddCondition(ParentLookup, ConditionOperator.Equal, targetEntity.Id);
-                EntityCollection results =
-                    sysService.RetrieveMultiple(query);
-
+                // Look at parent
+                Entity currentParentState = sysService.Retrieve(ParentEntity, targetEntity.Id, new ColumnSet(parentLookupToUpdate));
+                EntityReference existingChildRef = currentParentState.GetAttributeValue<EntityReference>(parentLookupToUpdate);                
+                
                 Guid childRecordId = Guid.Empty;
 
-                // Create child record if needed else exit
-                if (results.Entities.Count == 0)
+                // If child exists get id
+                if (existingChildRef != null)
+                {
+                    childRecordId = existingChildRef.Id;
+                }
+                else
+
                 {
                     tracer.Trace($"No {targetChildEntityName} record exists. Create new record");
 
                     Entity newChildRecord = new Entity(targetChildEntityName);
-                    newChildRecord[ParentLookup] = new EntityReference(ParentEntity, targetEntity.Id);
 
                     // Get new child id
                     childRecordId = sysService.Create(newChildRecord);
-                }
-                else
-                {
-                    // Get existing child id
-                 childRecordId = results.Entities[0].Id;             
-
-                }
-
+                }                   
+                
                 // Update child lookup on parent
                 if (childRecordId != Guid.Empty && !string.IsNullOrEmpty(parentLookupToUpdate))
                 {                   
