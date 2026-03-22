@@ -14,6 +14,9 @@ namespace SUAenvPlugins.Action
 
         // Lookup Fields
         private const string ParentLookup = "sua_environmental";
+        private const string EAChildLookup = "sua_ea";
+        private const string EISChildLookup = "sua_eis";
+        private const string CATEXChildLookup = "sua_catex";
 
         // Env Action Type OptionSet Values
         private const int CATEX = 0;
@@ -57,15 +60,35 @@ namespace SUAenvPlugins.Action
                 // Associate nepa action type with form so we can switch
                 // Updated to fix recursive pattern error - case labels const value, break to skip if not needed
                 string targetChildEntityName = string.Empty;
+                string parentLookupToUpdate = string.Empty;
+
                 switch (nepaActionValue)
                 {
-                  case EA: targetChildEntityName =ChildEntityEA; break;
-                  case EIS: targetChildEntityName = ChildEntityEIS; break;
-                  case CATEX: targetChildEntityName = ChildEntityCATEX; break;                   
+                  case EA: targetChildEntityName =ChildEntityEA;
+                           parentLookupToUpdate = EAChildLookup;
+                           break;
+                  
+                    case EIS: targetChildEntityName = ChildEntityEIS; 
+                              parentLookupToUpdate = EISChildLookup;
+                              break;
+
+                  case CATEX: targetChildEntityName = ChildEntityCATEX; 
+                              parentLookupToUpdate = CATEXChildLookup;
+                              break;                   
                 }
 
+                // Lookups clear before update
+                Entity parentToUpdate = new Entity(ParentEntity, targetEntity.Id);
+                parentToUpdate[EAChildLookup] = null;
+                parentToUpdate[EISChildLookup] = null;
+                parentToUpdate[CATEXChildLookup] = null;
+
                 // Exit if its none of these (like NA)
-                if (string.IsNullOrEmpty(targetChildEntityName)) return;
+                if (string.IsNullOrEmpty(targetChildEntityName))
+                {
+                    sysService.Update(parentToUpdate);
+                    return;
+                }
 
                 // Does a child record already exist
                 QueryExpression query = new QueryExpression(targetChildEntityName)
@@ -78,6 +101,8 @@ namespace SUAenvPlugins.Action
                 EntityCollection results =
                     sysService.RetrieveMultiple(query);
 
+                Guid childRecordId = Guid.Empty;
+
                 // Create child record if needed else exit
                 if (results.Entities.Count == 0)
                 {
@@ -85,10 +110,23 @@ namespace SUAenvPlugins.Action
 
                     Entity newChildRecord = new Entity(targetChildEntityName);
                     newChildRecord[ParentLookup] = new EntityReference(ParentEntity, targetEntity.Id);
-                    sysService.Create(newChildRecord);
+
+                    // Get new child id
+                    childRecordId = sysService.Create(newChildRecord);
+                }
+                else
+                {
+                    // Get existing child id
+                 childRecordId = results.Entities[0].Id;             
 
                 }
 
+                // Update child lookup on parent
+                if (childRecordId != Guid.Empty && !string.IsNullOrEmpty(parentLookupToUpdate))
+                {                   
+                    parentToUpdate[parentLookupToUpdate] = new EntityReference(targetChildEntityName, childRecordId);
+                    sysService.Update(parentToUpdate);
+                }
             }
             catch (Exception ex)
             {
