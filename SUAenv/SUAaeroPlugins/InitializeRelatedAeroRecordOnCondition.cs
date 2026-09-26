@@ -87,10 +87,11 @@ namespace SUAenvPlugins.Action
                 EntityReference alertRef = currentAeroState.GetAttributeValue<EntityReference>(AlertsChildLookup);
                 EntityReference baselineRef = currentAeroState.GetAttributeValue<EntityReference>(BaselineChildLookup);
                 EntityReference baseline2Ref = currentAeroState.GetAttributeValue<EntityReference>(Baseline2ChildLookup);
+                EntityReference actionRef = currentAeroState.GetAttributeValue<EntityReference>(ActionLookupField);
 
                 if (isAlertOrNSA)
                 {
-                    // Action is Alert/NSA: Generate Alerts record, clear Baselines
+                    // Action is Alert/NSA generate alert record and clear baseline
                     if (alertRef == null)
                     {
                         tracer.Trace("Action Type is Alert/NSA. Creating new sua_alerts record.");
@@ -116,7 +117,15 @@ namespace SUAenvPlugins.Action
                     if (baselineRef == null)
                     {
                         tracer.Trace("Creating Primary sua_baseline record.");
-                        Guid newBaselineId = sysService.Create(new Entity(ChildEntityBaseline));
+                        Entity newBaseline = new Entity(ChildEntityBaseline);
+
+                        // Get action lookup reference from the aeronautical record
+                        if (actionRef != null)
+                        {
+                            newBaseline["sua_action"] = new EntityReference(ParentEntity, actionRef.Id);
+                        }
+
+                        Guid newBaselineId = sysService.Create(newBaseline);
                         AeroFormUpdate[BaselineChildLookup] = new EntityReference(ChildEntityBaseline, newBaselineId);
                         needsUpdate = true;
                     }
@@ -124,7 +133,15 @@ namespace SUAenvPlugins.Action
                     if (baseline2Ref == null)
                     {
                         tracer.Trace("Creating Secondary sua_baseline record (baseline2).");
-                        Guid newBaseline2Id = sysService.Create(new Entity(ChildEntityBaseline));
+                        Entity newBaseline2 = new Entity(ChildEntityBaseline);
+
+                        // Set action table lookup 
+                        if (actionRef != null)
+                        {
+                            newBaseline2["sua_action"] = new EntityReference(ParentEntity, actionRef.Id);
+                        }
+
+                        Guid newBaseline2Id = sysService.Create(newBaseline2);
                         AeroFormUpdate[Baseline2ChildLookup] = new EntityReference(ChildEntityBaseline, newBaseline2Id);
                         needsUpdate = true;
                     }
@@ -134,30 +151,30 @@ namespace SUAenvPlugins.Action
                         AeroFormUpdate[AlertsChildLookup] = null;
                         needsUpdate = true;
                     }
-                }
 
-                // Check supplemental rulemaking requirement (Yes/No Boolean)
-                bool reqSupplemental = currentAeroState.GetAttributeValue<bool>(RequiresSupplementalField);
-                EntityReference suppRef = currentAeroState.GetAttributeValue<EntityReference>(SupplementalRulemakingChildLookup);
+                    // Check supplemental rulemaking requirement 
+                    bool reqSupplemental = currentAeroState.GetAttributeValue<bool>(RequiresSupplementalField);
+                    EntityReference suppRef = currentAeroState.GetAttributeValue<EntityReference>(SupplementalRulemakingChildLookup);
 
-                if (reqSupplemental && suppRef == null)
-                {
-                    tracer.Trace("Requires Supplemental Rulemaking is True. Creating sua_supplementalrulemaking record.");
-                    Guid suppId = sysService.Create(new Entity(ChildEntitySupplemental));
-                    AeroFormUpdate[SupplementalRulemakingChildLookup] = new EntityReference(ChildEntitySupplemental, suppId);
-                    needsUpdate = true;
-                }
-                else if (!reqSupplemental && suppRef != null)
-                {
-                    tracer.Trace("Requires Supplemental Rulemaking is False. Clearing lookup.");
-                    AeroFormUpdate[SupplementalRulemakingChildLookup] = null;
-                    needsUpdate = true;
-                }
+                    if (reqSupplemental && suppRef == null)
+                    {
+                        tracer.Trace("Requires Supplemental Rulemaking is True. Creating sua_supplementalrulemaking record.");
+                        Guid suppId = sysService.Create(new Entity(ChildEntitySupplemental));
+                        AeroFormUpdate[SupplementalRulemakingChildLookup] = new EntityReference(ChildEntitySupplemental, suppId);
+                        needsUpdate = true;
+                    }
+                    else if (!reqSupplemental && suppRef != null)
+                    {
+                        tracer.Trace("Requires Supplemental Rulemaking is False. Clearing lookup.");
+                        AeroFormUpdate[SupplementalRulemakingChildLookup] = null;
+                        needsUpdate = true;
+                    }
 
-                // Save changes if any updates were made
-                if (needsUpdate)
-                {
-                    sysService.Update(AeroFormUpdate);
+                    // Save changes if any updates were made
+                    if (needsUpdate)
+                    {
+                        sysService.Update(AeroFormUpdate);
+                    }
                 }
             }
             catch (Exception ex)
