@@ -90,6 +90,7 @@
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="SUAaeroPlugins\CleanupRelatedAeroRecordsOnDelete.cs" />
     <Compile Include="SUAenvPlugins\InitializeRelatedEnvRecordOnCondition.cs" />
     <Compile Include="SUAaeroPlugins\InitializeRelatedAeroRecordOnCondition.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
