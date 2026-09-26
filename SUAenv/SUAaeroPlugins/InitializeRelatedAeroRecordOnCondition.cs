@@ -71,17 +71,6 @@ namespace SUAenvPlugins.Action
                     )
                 );
 
-                // Set parent action lookup so the file component form always displays
-                EntityReference actionRef = currentAeroState.GetAttributeValue<EntityReference>(ActionLookupField);
-
-                if (actionRef == null)
-                {
-                    tracer.Trace("Parent Action record is missing. Creating new sua_action record.");
-                    Guid newActionId = sysService.Create(new Entity(ParentEntity));
-                    AeroFormUpdate[ActionLookupField] = new EntityReference(ParentEntity, newActionId);
-                    needsUpdate = true;
-                }            
-
                 // Look at the type of action
                 var typeOfActionOptionSet = currentAeroState.GetAttributeValue<OptionSetValue>(TypeOfActionField);
                 bool isAlertOrNSA = false;
