@@ -6,7 +6,8 @@ namespace SUAenvPlugins.Action
 {
     public class InitializeRelatedAeroRecordsOnCondition : PluginBase
     {
-        // Entity References       
+        // Entity References
+        private const string ParentEntity = "sua_action";
         private const string ChildEntityAeronautical = "sua_aeronautical";
         private const string ChildEntityBaseline = "sua_baseline";
         private const string ChildEntitySupplemental = "sua_supplementalrulemaking";
@@ -17,6 +18,7 @@ namespace SUAenvPlugins.Action
         private const string Baseline2ChildLookup = "sua_baseline2";
         private const string SupplementalRulemakingChildLookup = "sua_supplementalrulemaking";
         private const string AlertsChildLookup = "sua_alerts";
+        private const string ActionLookupField = "sua_action";
 
         // OptionSet / Field Names
         private const string TypeOfActionField = "sua_typeofaction";
@@ -64,9 +66,21 @@ namespace SUAenvPlugins.Action
                         SupplementalRulemakingChildLookup,
                         AlertsChildLookup,
                         TypeOfActionField,
-                        RequiresSupplementalField
+                        RequiresSupplementalField,
+                        ActionLookupField
                     )
                 );
+
+                // Set parent action lookup so the file component form always displays
+                EntityReference actionRef = currentAeroState.GetAttributeValue<EntityReference>(ActionLookupField);
+
+                if (actionRef == null)
+                {
+                    tracer.Trace("Parent Action record is missing. Creating new sua_action record.");
+                    Guid newActionId = sysService.Create(new Entity(ParentEntity));
+                    AeroFormUpdate[ActionLookupField] = new EntityReference(ParentEntity, newActionId);
+                    needsUpdate = true;
+                }            
 
                 // Look at the type of action
                 var typeOfActionOptionSet = currentAeroState.GetAttributeValue<OptionSetValue>(TypeOfActionField);
