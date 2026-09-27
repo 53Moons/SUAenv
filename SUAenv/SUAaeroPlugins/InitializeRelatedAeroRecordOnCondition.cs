@@ -6,25 +6,17 @@ namespace SUAenvPlugins.Action
 {
     public class InitializeRelatedAeroRecordsOnCondition : PluginBase
     {
-        // Entity References
         private const string ParentEntity = "sua_action";
         private const string ChildEntityAeronautical = "sua_aeronautical";
         private const string ChildEntityBaseline = "sua_baseline";
-        private const string ChildEntitySupplemental = "sua_supplementalrulemaking";
         private const string ChildEntityAlert = "sua_alerts";
 
-        // Lookup Fields       
         private const string BaselineChildLookup = "sua_baseline";
         private const string Baseline2ChildLookup = "sua_baseline2";
-        private const string SupplementalRulemakingChildLookup = "sua_supplementalrulemaking";
         private const string AlertsChildLookup = "sua_alerts";
         private const string ActionLookupField = "sua_action";
-
-        // OptionSet / Field Names
         private const string TypeOfActionField = "sua_typeofaction";
-        private const string RequiresSupplementalField = "sua_requiressupplementalrulemaking";
 
-        // OptionSet Values
         private const int ActionTypeAlertArea = 5;
         private const int ActionTypeNSA = 6;
 
@@ -50,28 +42,23 @@ namespace SUAenvPlugins.Action
 
                 Entity targetEntity = (Entity)context.InputParameters["Target"];
 
-                // Get aeronautical parent record or exit
                 if (targetEntity.LogicalName != ChildEntityAeronautical) return;
 
                 Entity AeroFormUpdate = new Entity(ChildEntityAeronautical, targetEntity.Id);
                 bool needsUpdate = false;
 
-                // Fetch the current state of lookups and fields
                 Entity currentAeroState = sysService.Retrieve(
                     ChildEntityAeronautical,
                     targetEntity.Id,
                     new ColumnSet(
                         BaselineChildLookup,
                         Baseline2ChildLookup,
-                        SupplementalRulemakingChildLookup,
                         AlertsChildLookup,
                         TypeOfActionField,
-                        RequiresSupplementalField,
                         ActionLookupField
                     )
                 );
 
-                // Look at the type of action
                 var typeOfActionOptionSet = currentAeroState.GetAttributeValue<OptionSetValue>(TypeOfActionField);
                 bool isAlertOrNSA = false;
 
@@ -91,7 +78,7 @@ namespace SUAenvPlugins.Action
 
                 if (isAlertOrNSA)
                 {
-                    // Action is Alert/NSA generate alert record and clear baseline
+                    // Action is Alert/NSA: Generate alert record and clear baselines
                     if (alertRef == null)
                     {
                         tracer.Trace("Action Type is Alert/NSA. Creating new sua_alerts record.");
@@ -113,13 +100,12 @@ namespace SUAenvPlugins.Action
                 }
                 else
                 {
-                    // Generate baseline records if conditions met and clear alerts
+                    // Action is NOT Alert/NSA: Generate baselines and clear alerts
                     if (baselineRef == null)
                     {
                         tracer.Trace("Creating Primary sua_baseline record.");
                         Entity newBaseline = new Entity(ChildEntityBaseline);
 
-                        // Get action lookup reference from the aeronautical record
                         if (actionRef != null)
                         {
                             newBaseline["sua_action"] = new EntityReference(ParentEntity, actionRef.Id);
@@ -135,7 +121,6 @@ namespace SUAenvPlugins.Action
                         tracer.Trace("Creating Secondary sua_baseline record (baseline2).");
                         Entity newBaseline2 = new Entity(ChildEntityBaseline);
 
-                        // Set action table lookup 
                         if (actionRef != null)
                         {
                             newBaseline2["sua_action"] = new EntityReference(ParentEntity, actionRef.Id);
@@ -151,30 +136,11 @@ namespace SUAenvPlugins.Action
                         AeroFormUpdate[AlertsChildLookup] = null;
                         needsUpdate = true;
                     }
+                }
 
-                    // Check supplemental rulemaking requirement 
-                    bool reqSupplemental = currentAeroState.GetAttributeValue<bool>(RequiresSupplementalField);
-                    EntityReference suppRef = currentAeroState.GetAttributeValue<EntityReference>(SupplementalRulemakingChildLookup);
-
-                    if (reqSupplemental && suppRef == null)
-                    {
-                        tracer.Trace("Requires Supplemental Rulemaking is True. Creating sua_supplementalrulemaking record.");
-                        Guid suppId = sysService.Create(new Entity(ChildEntitySupplemental));
-                        AeroFormUpdate[SupplementalRulemakingChildLookup] = new EntityReference(ChildEntitySupplemental, suppId);
-                        needsUpdate = true;
-                    }
-                    else if (!reqSupplemental && suppRef != null)
-                    {
-                        tracer.Trace("Requires Supplemental Rulemaking is False. Clearing lookup.");
-                        AeroFormUpdate[SupplementalRulemakingChildLookup] = null;
-                        needsUpdate = true;
-                    }
-
-                    // Save changes if any updates were made
-                    if (needsUpdate)
-                    {
-                        sysService.Update(AeroFormUpdate);
-                    }
+                if (needsUpdate)
+                {
+                    sysService.Update(AeroFormUpdate);
                 }
             }
             catch (Exception ex)
