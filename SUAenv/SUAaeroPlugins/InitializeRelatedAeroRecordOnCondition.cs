@@ -12,7 +12,7 @@ namespace SUAenvPlugins.Action
         private const string ChildEntityAlert = "sua_alerts";
 
         private const string BaselineChildLookup = "sua_baseline";
-        private const string Baseline2ChildLookup = "sua_baseline2";
+        // Removed Baseline2ChildLookup
         private const string AlertsChildLookup = "sua_alerts";
         private const string ActionLookupField = "sua_action";
         private const string TypeOfActionField = "sua_typeofaction";
@@ -52,11 +52,10 @@ namespace SUAenvPlugins.Action
                     targetEntity.Id,
                     new ColumnSet(
                         BaselineChildLookup,
-                        Baseline2ChildLookup,
                         AlertsChildLookup,
                         TypeOfActionField,
                         ActionLookupField
-                    )
+                    ) // Removed Baseline2 from ColumnSet
                 );
 
                 var typeOfActionOptionSet = currentAeroState.GetAttributeValue<OptionSetValue>(TypeOfActionField);
@@ -73,12 +72,11 @@ namespace SUAenvPlugins.Action
 
                 EntityReference alertRef = currentAeroState.GetAttributeValue<EntityReference>(AlertsChildLookup);
                 EntityReference baselineRef = currentAeroState.GetAttributeValue<EntityReference>(BaselineChildLookup);
-                EntityReference baseline2Ref = currentAeroState.GetAttributeValue<EntityReference>(Baseline2ChildLookup);
                 EntityReference actionRef = currentAeroState.GetAttributeValue<EntityReference>(ActionLookupField);
 
                 if (isAlertOrNSA)
                 {
-                    // Action is Alert/NSA: Generate alert record and clear baselines
+                    // Action is Alert/NSA: Generate alert record and clear single baseline
                     if (alertRef == null)
                     {
                         tracer.Trace("Action Type is Alert/NSA. Creating new sua_alerts record.");
@@ -92,15 +90,10 @@ namespace SUAenvPlugins.Action
                         AeroFormUpdate[BaselineChildLookup] = null;
                         needsUpdate = true;
                     }
-                    if (baseline2Ref != null)
-                    {
-                        AeroFormUpdate[Baseline2ChildLookup] = null;
-                        needsUpdate = true;
-                    }
                 }
                 else
                 {
-                    // Action is NOT Alert/NSA: Generate baselines and clear alerts
+                    // Action is NOT Alert/NSA: Generate single baseline and clear alerts
                     if (baselineRef == null)
                     {
                         tracer.Trace("Creating Primary sua_baseline record.");
@@ -108,26 +101,12 @@ namespace SUAenvPlugins.Action
 
                         if (actionRef != null)
                         {
+                            // This maps the Parent Action to the new Baseline automatically!
                             newBaseline["sua_action"] = new EntityReference(ParentEntity, actionRef.Id);
                         }
 
                         Guid newBaselineId = sysService.Create(newBaseline);
                         AeroFormUpdate[BaselineChildLookup] = new EntityReference(ChildEntityBaseline, newBaselineId);
-                        needsUpdate = true;
-                    }
-
-                    if (baseline2Ref == null)
-                    {
-                        tracer.Trace("Creating Secondary sua_baseline record (baseline2).");
-                        Entity newBaseline2 = new Entity(ChildEntityBaseline);
-
-                        if (actionRef != null)
-                        {
-                            newBaseline2["sua_action"] = new EntityReference(ParentEntity, actionRef.Id);
-                        }
-
-                        Guid newBaseline2Id = sysService.Create(newBaseline2);
-                        AeroFormUpdate[Baseline2ChildLookup] = new EntityReference(ChildEntityBaseline, newBaseline2Id);
                         needsUpdate = true;
                     }
 
