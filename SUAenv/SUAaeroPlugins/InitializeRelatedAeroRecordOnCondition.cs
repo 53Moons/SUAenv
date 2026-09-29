@@ -12,7 +12,6 @@ namespace SUAenvPlugins.Action
         private const string ChildEntityAlert = "sua_alerts";
 
         private const string BaselineChildLookup = "sua_baseline";
-        // Removed Baseline2ChildLookup
         private const string AlertsChildLookup = "sua_alerts";
         private const string ActionLookupField = "sua_action";
         private const string TypeOfActionField = "sua_typeofaction";
@@ -55,7 +54,7 @@ namespace SUAenvPlugins.Action
                         AlertsChildLookup,
                         TypeOfActionField,
                         ActionLookupField
-                    ) // Removed Baseline2 from ColumnSet
+                    )
                 );
 
                 var typeOfActionOptionSet = currentAeroState.GetAttributeValue<OptionSetValue>(TypeOfActionField);
@@ -72,7 +71,23 @@ namespace SUAenvPlugins.Action
 
                 EntityReference alertRef = currentAeroState.GetAttributeValue<EntityReference>(AlertsChildLookup);
                 EntityReference baselineRef = currentAeroState.GetAttributeValue<EntityReference>(BaselineChildLookup);
-                EntityReference actionRef = currentAeroState.GetAttributeValue<EntityReference>(ActionLookupField);
+
+                // SAFELY GRAB THE ACTION ID (Check Target first, then Database)
+                EntityReference actionRef = null;
+                if (targetEntity.Contains(ActionLookupField) && targetEntity[ActionLookupField] != null)
+                {
+                    actionRef = targetEntity.GetAttributeValue<EntityReference>(ActionLookupField);
+                    tracer.Trace("Found Action ID in the Target data.");
+                }
+                else if (currentAeroState.Contains(ActionLookupField) && currentAeroState[ActionLookupField] != null)
+                {
+                    actionRef = currentAeroState.GetAttributeValue<EntityReference>(ActionLookupField);
+                    tracer.Trace("Found Action ID in the Database.");
+                }
+                else
+                {
+                    tracer.Trace("WARNING: Action ID is null! Could not find it on the Aeronautical record.");
+                }
 
                 if (isAlertOrNSA)
                 {
@@ -101,8 +116,9 @@ namespace SUAenvPlugins.Action
 
                         if (actionRef != null)
                         {
-                            // This maps the Parent Action to the new Baseline automatically!
+                            // This maps the Parent Action to the new Baseline automatically
                             newBaseline["sua_action"] = new EntityReference(ParentEntity, actionRef.Id);
+                            tracer.Trace($"Successfully mapped Action {actionRef.Id} to the new Baseline.");
                         }
 
                         Guid newBaselineId = sysService.Create(newBaseline);
