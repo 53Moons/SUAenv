@@ -6,24 +6,28 @@ namespace SUAenvPlugins.Action
 {
     public class InitializeRelatedAeroRecordsOnCondition : PluginBase
     {
+        // Entity names
         private const string ParentEntity = "sua_action";
         private const string ChildEntityAeronautical = "sua_aeronautical";
         private const string ChildEntityBaseline = "sua_baseline";
         private const string ChildEntityAlert = "sua_alerts";
-
-        // CFA Additions
         private const string ChildEntityCFA = "sua_controlledfiringarea";
-        private const string CFAChildLookup = "sua_controlledfiringarea"; 
-        private const string FormalProposalReceivedField = "sua_formalproposalreceived";
+                            
+        // Date mapping names
+        private const string AeroFormalProposalDateField = "sua_formalproposaldate";
+        private const string CFAFormalProposalReceivedField = "sua_formalproposalreceived";
 
+        // Lookup field names
         private const string BaselineChildLookup = "sua_baseline";
         private const string AlertsChildLookup = "sua_alerts";
         private const string ActionLookupField = "sua_action";
         private const string TypeOfActionField = "sua_typeofaction";
+        private const string CFAChildLookup = "sua_controlledfiringarea";
 
+        // Option set values for Type of Action
         private const int ActionTypeAlertArea = 5;
         private const int ActionTypeNSA = 6;
-        private const int ActionTypeCFA = 7; 
+        private const int ActionTypeCFA = 7;
 
         public InitializeRelatedAeroRecordsOnCondition()
             : base(typeof(InitializeRelatedAeroRecordsOnCondition))
@@ -58,10 +62,10 @@ namespace SUAenvPlugins.Action
                     new ColumnSet(
                         BaselineChildLookup,
                         AlertsChildLookup,
-                        CFAChildLookup, 
+                        CFAChildLookup,
                         TypeOfActionField,
                         ActionLookupField,
-                        FormalProposalReceivedField 
+                        AeroFormalProposalDateField // Read from Aeronautical using its specific field name
                     )
                 );
 
@@ -89,12 +93,12 @@ namespace SUAenvPlugins.Action
                 else if (currentAeroState.Contains(ActionLookupField) && currentAeroState[ActionLookupField] != null)
                     actionRef = currentAeroState.GetAttributeValue<EntityReference>(ActionLookupField);
 
-                // SAFELY GRAB FORMAL PROPOSAL RECEIVED DATE
+                // SAFELY GRAB FORMAL PROPOSAL DATE FROM AERONAUTICAL
                 DateTime? formalProposalDate = null;
-                if (targetEntity.Contains(FormalProposalReceivedField) && targetEntity[FormalProposalReceivedField] != null)
-                    formalProposalDate = targetEntity.GetAttributeValue<DateTime>(FormalProposalReceivedField);
-                else if (currentAeroState.Contains(FormalProposalReceivedField) && currentAeroState[FormalProposalReceivedField] != null)
-                    formalProposalDate = currentAeroState.GetAttributeValue<DateTime>(FormalProposalReceivedField);
+                if (targetEntity.Contains(AeroFormalProposalDateField) && targetEntity[AeroFormalProposalDateField] != null)
+                    formalProposalDate = targetEntity.GetAttributeValue<DateTime>(AeroFormalProposalDateField);
+                else if (currentAeroState.Contains(AeroFormalProposalDateField) && currentAeroState[AeroFormalProposalDateField] != null)
+                    formalProposalDate = currentAeroState.GetAttributeValue<DateTime>(AeroFormalProposalDateField);
 
 
                 if (isAlertOrNSA)
@@ -142,9 +146,9 @@ namespace SUAenvPlugins.Action
                         if (createdBaselineId.HasValue)
                             newCfa["sua_baseline"] = new EntityReference(ChildEntityBaseline, createdBaselineId.Value);
 
-                        // Pass the Date
+                        // MAP TO THE CFA SPECIFIC FIELD NAME
                         if (formalProposalDate.HasValue)
-                            newCfa[FormalProposalReceivedField] = formalProposalDate.Value;
+                            newCfa[CFAFormalProposalReceivedField] = formalProposalDate.Value;
 
                         Guid newCfaId = sysService.Create(newCfa);
                         AeroFormUpdate[CFAChildLookup] = new EntityReference(ChildEntityCFA, newCfaId);
