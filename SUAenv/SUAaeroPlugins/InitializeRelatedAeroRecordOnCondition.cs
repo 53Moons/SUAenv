@@ -11,6 +11,11 @@ namespace SUAenvPlugins.Action
         private const string ChildEntityBaseline = "sua_baseline";
         private const string ChildEntityAlert = "sua_alerts";
 
+        // CFA Additions
+        private const string ChildEntityCFA = "sua_controlledfiringarea";
+        private const string CFAChildLookup = "sua_controlledfiringarea"; 
+        private const string FormalProposalReceivedField = "sua_formalproposalreceived";
+
         private const string BaselineChildLookup = "sua_baseline";
         private const string AlertsChildLookup = "sua_alerts";
         private const string ActionLookupField = "sua_action";
@@ -18,6 +23,7 @@ namespace SUAenvPlugins.Action
 
         private const int ActionTypeAlertArea = 5;
         private const int ActionTypeNSA = 6;
+        private const int ActionTypeCFA = 7; 
 
         public InitializeRelatedAeroRecordsOnCondition()
             : base(typeof(InitializeRelatedAeroRecordsOnCondition))
@@ -52,85 +58,116 @@ namespace SUAenvPlugins.Action
                     new ColumnSet(
                         BaselineChildLookup,
                         AlertsChildLookup,
+                        CFAChildLookup, 
                         TypeOfActionField,
-                        ActionLookupField
+                        ActionLookupField,
+                        FormalProposalReceivedField 
                     )
                 );
 
                 var typeOfActionOptionSet = currentAeroState.GetAttributeValue<OptionSetValue>(TypeOfActionField);
                 bool isAlertOrNSA = false;
+                bool isCFA = false;
 
                 if (typeOfActionOptionSet != null)
                 {
                     int typeValue = typeOfActionOptionSet.Value;
                     if (typeValue == ActionTypeAlertArea || typeValue == ActionTypeNSA)
-                    {
                         isAlertOrNSA = true;
-                    }
+                    else if (typeValue == ActionTypeCFA)
+                        isCFA = true;
                 }
 
                 EntityReference alertRef = currentAeroState.GetAttributeValue<EntityReference>(AlertsChildLookup);
                 EntityReference baselineRef = currentAeroState.GetAttributeValue<EntityReference>(BaselineChildLookup);
+                EntityReference cfaRef = currentAeroState.GetAttributeValue<EntityReference>(CFAChildLookup);
 
-                // SAFELY GRAB THE ACTION ID (Check Target first, then Database)
+                // SAFELY GRAB THE ACTION ID
                 EntityReference actionRef = null;
                 if (targetEntity.Contains(ActionLookupField) && targetEntity[ActionLookupField] != null)
-                {
                     actionRef = targetEntity.GetAttributeValue<EntityReference>(ActionLookupField);
-                    tracer.Trace("Found Action ID in the Target data.");
-                }
                 else if (currentAeroState.Contains(ActionLookupField) && currentAeroState[ActionLookupField] != null)
-                {
                     actionRef = currentAeroState.GetAttributeValue<EntityReference>(ActionLookupField);
-                    tracer.Trace("Found Action ID in the Database.");
-                }
-                else
-                {
-                    tracer.Trace("WARNING: Action ID is null! Could not find it on the Aeronautical record.");
-                }
+
+                // SAFELY GRAB FORMAL PROPOSAL RECEIVED DATE
+                DateTime? formalProposalDate = null;
+                if (targetEntity.Contains(FormalProposalReceivedField) && targetEntity[FormalProposalReceivedField] != null)
+                    formalProposalDate = targetEntity.GetAttributeValue<DateTime>(FormalProposalReceivedField);
+                else if (currentAeroState.Contains(FormalProposalReceivedField) && currentAeroState[FormalProposalReceivedField] != null)
+                    formalProposalDate = currentAeroState.GetAttributeValue<DateTime>(FormalProposalReceivedField);
+
 
                 if (isAlertOrNSA)
                 {
-                    // Action is Alert/NSA: Generate alert record and clear single baseline
+                    // Action is Alert/NSA: Generate alert record and clear other lookups
                     if (alertRef == null)
                     {
-                        tracer.Trace("Action Type is Alert/NSA. Creating new sua_alerts record.");
                         Guid newAlertId = sysService.Create(new Entity(ChildEntityAlert));
                         AeroFormUpdate[AlertsChildLookup] = new EntityReference(ChildEntityAlert, newAlertId);
                         needsUpdate = true;
                     }
+                    if (baselineRef != null) { AeroFormUpdate[BaselineChildLookup] = null; needsUpdate = true; }
+                    if (cfaRef != null) { AeroFormUpdate[CFAChildLookup] = null; needsUpdate = true; }
+                }
+                else if (isCFA)
+                {
+                    // Action is CFA: Generate Baseline AND CFA record
+                    Guid? createdBaselineId = null;
 
-                    if (baselineRef != null)
+                    // 1. Ensure Baseline Exists
+                    if (baselineRef == null)
                     {
-                        AeroFormUpdate[BaselineChildLookup] = null;
+                        Entity newBaseline = new Entity(ChildEntityBaseline);
+                        if (actionRef != null) newBaseline["sua_action"] = new EntityReference(ParentEntity, actionRef.Id);
+
+                        createdBaselineId = sysService.Create(newBaseline);
+                        AeroFormUpdate[BaselineChildLookup] = new EntityReference(ChildEntityBaseline, createdBaselineId.Value);
                         needsUpdate = true;
                     }
+                    else
+                    {
+                        createdBaselineId = baselineRef.Id;
+                    }
+
+                    // 2. Generate CFA Record
+                    if (cfaRef == null)
+                    {
+                        tracer.Trace("Action Type is CFA. Creating new sua_controlledfiringarea record.");
+                        Entity newCfa = new Entity(ChildEntityCFA);
+
+                        // Pass the Aeronautical Lookup
+                        newCfa["sua_aeronautical"] = new EntityReference(ChildEntityAeronautical, targetEntity.Id);
+
+                        // Pass the Baseline Lookup
+                        if (createdBaselineId.HasValue)
+                            newCfa["sua_baseline"] = new EntityReference(ChildEntityBaseline, createdBaselineId.Value);
+
+                        // Pass the Date
+                        if (formalProposalDate.HasValue)
+                            newCfa[FormalProposalReceivedField] = formalProposalDate.Value;
+
+                        Guid newCfaId = sysService.Create(newCfa);
+                        AeroFormUpdate[CFAChildLookup] = new EntityReference(ChildEntityCFA, newCfaId);
+                        needsUpdate = true;
+                    }
+
+                    if (alertRef != null) { AeroFormUpdate[AlertsChildLookup] = null; needsUpdate = true; }
                 }
                 else
                 {
-                    // Action is NOT Alert/NSA: Generate single baseline and clear alerts
+                    // Action is Standard: Generate single baseline and clear others
                     if (baselineRef == null)
                     {
-                        tracer.Trace("Creating Primary sua_baseline record.");
                         Entity newBaseline = new Entity(ChildEntityBaseline);
-
-                        if (actionRef != null)
-                        {
-                            // This maps the Parent Action to the new Baseline automatically
-                            newBaseline["sua_action"] = new EntityReference(ParentEntity, actionRef.Id);
-                            tracer.Trace($"Successfully mapped Action {actionRef.Id} to the new Baseline.");
-                        }
+                        if (actionRef != null) newBaseline["sua_action"] = new EntityReference(ParentEntity, actionRef.Id);
 
                         Guid newBaselineId = sysService.Create(newBaseline);
                         AeroFormUpdate[BaselineChildLookup] = new EntityReference(ChildEntityBaseline, newBaselineId);
                         needsUpdate = true;
                     }
 
-                    if (alertRef != null)
-                    {
-                        AeroFormUpdate[AlertsChildLookup] = null;
-                        needsUpdate = true;
-                    }
+                    if (alertRef != null) { AeroFormUpdate[AlertsChildLookup] = null; needsUpdate = true; }
+                    if (cfaRef != null) { AeroFormUpdate[CFAChildLookup] = null; needsUpdate = true; }
                 }
 
                 if (needsUpdate)
