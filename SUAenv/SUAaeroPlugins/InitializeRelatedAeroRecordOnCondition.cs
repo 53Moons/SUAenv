@@ -12,10 +12,10 @@ namespace SUAenvPlugins.Action
         private const string ChildEntityBaseline = "sua_baseline";
         private const string ChildEntityAlert = "sua_alerts";
         private const string ChildEntityCFA = "sua_controlledfiringarea";
-                            
+
         // Date mapping names
         private const string AeroFormalProposalDateField = "sua_formalproposaldate";
-        private const string CFAFormalProposalReceivedField = "sua_formalproposalreceived";
+        private const string ChildFormalProposalReceivedField = "sua_formalproposalreceived"; // Used for both CFA and Alerts
 
         // Lookup field names
         private const string BaselineChildLookup = "sua_baseline";
@@ -103,14 +103,47 @@ namespace SUAenvPlugins.Action
 
                 if (isAlertOrNSA)
                 {
-                    // Action is Alert/NSA: Generate alert record and clear other lookups
+                    // Action is Alert/NSA: Generate Baseline AND Alert record
+                    Guid? createdBaselineId = null;
+
+                    // 1. Ensure Baseline Exists
+                    if (baselineRef == null)
+                    {
+                        Entity newBaseline = new Entity(ChildEntityBaseline);
+                        if (actionRef != null) newBaseline["sua_action"] = new EntityReference(ParentEntity, actionRef.Id);
+
+                        createdBaselineId = sysService.Create(newBaseline);
+                        AeroFormUpdate[BaselineChildLookup] = new EntityReference(ChildEntityBaseline, createdBaselineId.Value);
+                        needsUpdate = true;
+                    }
+                    else
+                    {
+                        createdBaselineId = baselineRef.Id;
+                    }
+
+                    // 2. Generate Alert Record
                     if (alertRef == null)
                     {
-                        Guid newAlertId = sysService.Create(new Entity(ChildEntityAlert));
+                        tracer.Trace("Action Type is Alert/NSA. Creating new sua_alerts record.");
+                        Entity newAlert = new Entity(ChildEntityAlert);
+
+                        // Pass the Aeronautical Lookup
+                        newAlert["sua_aeronautical"] = new EntityReference(ChildEntityAeronautical, targetEntity.Id);
+
+                        // Pass the Baseline Lookup
+                        if (createdBaselineId.HasValue)
+                            newAlert["sua_baseline"] = new EntityReference(ChildEntityBaseline, createdBaselineId.Value);
+
+                        // MAP TO THE ALERT SPECIFIC FIELD NAME
+                        if (formalProposalDate.HasValue)
+                            newAlert[ChildFormalProposalReceivedField] = formalProposalDate.Value;
+
+                        Guid newAlertId = sysService.Create(newAlert);
                         AeroFormUpdate[AlertsChildLookup] = new EntityReference(ChildEntityAlert, newAlertId);
                         needsUpdate = true;
                     }
-                    if (baselineRef != null) { AeroFormUpdate[BaselineChildLookup] = null; needsUpdate = true; }
+
+                    // Clear CFA if it exists
                     if (cfaRef != null) { AeroFormUpdate[CFAChildLookup] = null; needsUpdate = true; }
                 }
                 else if (isCFA)
@@ -148,13 +181,14 @@ namespace SUAenvPlugins.Action
 
                         // MAP TO THE CFA SPECIFIC FIELD NAME
                         if (formalProposalDate.HasValue)
-                            newCfa[CFAFormalProposalReceivedField] = formalProposalDate.Value;
+                            newCfa[ChildFormalProposalReceivedField] = formalProposalDate.Value;
 
                         Guid newCfaId = sysService.Create(newCfa);
                         AeroFormUpdate[CFAChildLookup] = new EntityReference(ChildEntityCFA, newCfaId);
                         needsUpdate = true;
                     }
 
+                    // Clear Alert if it exists
                     if (alertRef != null) { AeroFormUpdate[AlertsChildLookup] = null; needsUpdate = true; }
                 }
                 else
